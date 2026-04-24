@@ -445,15 +445,17 @@ def preview_asset(preview_id, filename):
 # Bootstrap
 # ---------------------------------------------------------------------------
 
+os.makedirs(os.path.join(UPLOAD_DIR, "sources"), exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_DIR, "previews"), exist_ok=True)
+
+with app.app_context():
+    db.create_all()
+    with db.engine.connect() as conn:
+        try:
+            conn.execute(db.text("ALTER TABLE modules ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass
+
 if __name__ == "__main__":
-    os.makedirs(os.path.join(UPLOAD_DIR, "sources"), exist_ok=True)
-    os.makedirs(os.path.join(UPLOAD_DIR, "previews"), exist_ok=True)
-    with app.app_context():
-        db.create_all()
-        with db.engine.connect() as conn:
-            try:
-                conn.execute(db.text("ALTER TABLE modules ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"))
-                conn.commit()
-            except Exception:
-                pass
     app.run(debug=True, host="0.0.0.0", port=8111, use_reloader=False)
