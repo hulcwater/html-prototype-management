@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTML 原型管理</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1677ff" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      <span>HTML 原型管理</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div id="module-list"></div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn-add-module" onclick="openAddModuleModal()">+ 新增模块</button>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="main-header">
+      <h1 id="page-title">全部原型</h1>
+      <div class="header-actions">
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="search-input" placeholder="搜索原型" oninput="handleSearch(this.value)" />
+        </div>
+        <button class="btn-primary" onclick="openNewPrototypeModal()">+ 新建原型</button>
+      </div>
+    </div>
+    <div class="prototype-grid" id="prototype-grid"></div>
+    <div class="empty-state" id="empty-state" style="display:none">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d9d9d9" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14,2 14,8 20,8"/>
+      </svg>
+      <p>暂无原型</p>
+      <p class="empty-sub">点击右上角「新建原型」开始添加</p>
+    </div>
+  </main>
+</div>
+
+<!-- ════════════════════════════════════
+     Modal: 新增模块
+════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-add-module" style="display:none" onclick="overlayClose(event, 'modal-add-module')">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>新增模块</h3>
+      <button class="btn-close" onclick="closeModal('modal-add-module')">×</button>
+    </div>
+    <div class="modal-body">
+      <input id="add-module-name" class="form-input" placeholder="模块名称，如：采购、交付、品质"
+             onkeydown="if(event.key==='Enter') submitAddModule()" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-add-module')">取消</button>
+      <button class="btn-primary" onclick="submitAddModule()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     Modal: 编辑模块
+════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-module" style="display:none" onclick="overlayClose(event, 'modal-edit-module')">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>编辑模块</h3>
+      <button class="btn-close" onclick="closeModal('modal-edit-module')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-module-id" />
+      <input id="edit-module-name" class="form-input" placeholder="模块名称"
+             onkeydown="if(event.key==='Enter') submitEditModule()" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-edit-module')">取消</button>
+      <button class="btn-primary" onclick="submitEditModule()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     Modal: 新建原型
+════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-new-prototype" style="display:none" onclick="overlayClose(event, 'modal-new-prototype')">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>新建原型</h3>
+      <button class="btn-close" onclick="closeModal('modal-new-prototype')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label required">所属模块</label>
+        <select id="new-proto-module" class="form-select">
+          <option value="">请选择模块</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label required">原型名称</label>
+        <input id="new-proto-name" class="form-input" placeholder="例如：采购订单管理" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">描述</label>
+        <input id="new-proto-desc" class="form-input" placeholder="简短描述（选填）" />
+      </div>
+      <div class="form-group">
+        <label class="form-label required">原型文件</label>
+        <div class="upload-area" id="new-upload-area" onclick="document.getElementById('new-proto-file').click()">
+          <div class="upload-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1677ff" stroke-width="1.5">
+              <polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+          </div>
+          <p>点击上传或拖拽文件到这里</p>
+          <p class="upload-hint">支持 .html 文件或静态资源 zip 包</p>
+          <p class="upload-selected" id="new-upload-selected"></p>
+        </div>
+        <input type="file" id="new-proto-file" accept=".html,.zip" style="display:none"
+               onchange="onFileSelect(this,'new-upload-selected')" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-new-prototype')">取消</button>
+      <button class="btn-primary" id="btn-create-proto" onclick="submitNewPrototype()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     Modal: 原型详情
+════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-detail" style="display:none" onclick="overlayClose(event, 'modal-detail')">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="detail-title"></h3>
+      <button class="btn-close" onclick="closeModal('modal-detail')">×</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     Modal: 编辑原型
+════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit-proto" style="display:none" onclick="overlayClose(event, 'modal-edit-proto')">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>编辑原型</h3>
+      <button class="btn-close" onclick="closeModal('modal-edit-proto')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-proto-id" />
+      <div class="form-group">
+        <label class="form-label required">所属模块</label>
+        <select id="edit-proto-module" class="form-select"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label required">原型名称</label>
+        <input id="edit-proto-name" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">描述</label>
+        <input id="edit-proto-desc" class="form-input" placeholder="简短描述（选填）" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-edit-proto')">取消</button>
+      <button class="btn-primary" onclick="submitEditPrototype()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     Modal: 更新文件
+════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-update-file" style="display:none" onclick="overlayClose(event, 'modal-update-file')">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>更新文件</h3>
+      <button class="btn-close" onclick="closeModal('modal-update-file')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="update-proto-id" />
+      <div class="form-group">
+        <label class="form-label required">原型文件</label>
+        <div class="upload-area" id="update-upload-area" onclick="document.getElementById('update-file-input').click()">
+          <div class="upload-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1677ff" stroke-width="1.5">
+              <polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+          </div>
+          <p>点击上传或拖拽文件到这里</p>
+          <p class="upload-hint">支持 .html 文件或静态资源 zip 包</p>
+          <p class="upload-selected" id="update-upload-selected"></p>
+        </div>
+        <input type="file" id="update-file-input" accept=".html,.zip" style="display:none"
+               onchange="onFileSelect(this,'update-upload-selected')" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">更新说明</label>
+        <input id="update-notes" class="form-input" placeholder="本次更新内容说明（选填）" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">更新人</label>
+        <input id="update-uploader" class="form-input" placeholder="更新人姓名（选填）" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-update-file')">取消</button>
+      <button class="btn-primary" id="btn-update-file" onclick="submitUpdateFile()">上传</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

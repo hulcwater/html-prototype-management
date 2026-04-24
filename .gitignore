@@ -1,0 +1,17 @@
+# 数据库（本地数据，不应提交）
+data.db
+
+# 用户上传的文件
+uploads/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 环境变量
+.env
+
+# 编辑器
+.vscode/
+.idea/
