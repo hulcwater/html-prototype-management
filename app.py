@@ -34,6 +34,7 @@ class Module(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     prototypes = db.relationship(
         "Prototype", backref="module", lazy=True, cascade="all, delete-orphan"
@@ -237,7 +238,7 @@ def index():
 
 @app.route("/api/modules", methods=["GET"])
 def list_modules():
-    modules = Module.query.order_by(Module.created_at).all()
+    modules = Module.query.order_by(Module.sort_order, Module.created_at).all()
     total = Prototype.query.count()
     return jsonify({"modules": [m.to_dict() for m in modules], "total": total})
 
@@ -277,6 +278,17 @@ def delete_module(mid):
     for p in m.prototypes:
         cleanup_prototype(p)
     db.session.delete(m)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/modules/reorder", methods=["PUT"])
+def reorder_modules():
+    ids = request.get_json(force=True).get("ids", [])
+    for i, mid in enumerate(ids):
+        m = db.session.get(Module, int(mid))
+        if m:
+            m.sort_order = i
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -438,4 +450,10 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(UPLOAD_DIR, "previews"), exist_ok=True)
     with app.app_context():
         db.create_all()
+        with db.engine.connect() as conn:
+            try:
+                conn.execute(db.text("ALTER TABLE modules ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"))
+                conn.commit()
+            except Exception:
+                pass
     app.run(debug=True, host="0.0.0.0", port=8111, use_reloader=False)

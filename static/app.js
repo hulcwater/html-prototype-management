@@ -112,7 +112,13 @@ function renderSidebar() {
   for (const m of state.modules) {
     const active = state.currentModuleId === m.id ? 'active' : '';
     html += `
-      <div class="module-item ${active}" onclick="selectModule(${m.id})">
+      <div class="module-item ${active}" draggable="true"
+           ondragstart="modDragStart(event,${m.id})"
+           ondragover="modDragOver(event,${m.id})"
+           ondragleave="modDragLeave(event)"
+           ondrop="modDrop(event,${m.id})"
+           ondragend="modDragEnd(event)"
+           onclick="selectModule(${m.id})">
         <span class="module-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -183,6 +189,56 @@ function renderPrototypes() {
            onclick="event.stopPropagation()">预览 ↗</a>
       </div>
     </div>`).join('');
+}
+
+/* ── Module: drag-to-reorder ── */
+let _dragId = null;
+
+function modDragStart(e, id) {
+  _dragId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => e.currentTarget.classList.add('dragging'), 0);
+}
+
+function modDragOver(e, id) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (_dragId === id) return;
+  document.querySelectorAll('.module-item').forEach(el => el.classList.remove('drag-over'));
+  e.currentTarget.classList.add('drag-over');
+}
+
+function modDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function modDrop(e, id) {
+  e.preventDefault();
+  document.querySelectorAll('.module-item').forEach(el => {
+    el.classList.remove('drag-over', 'dragging');
+  });
+  if (_dragId === null || _dragId === id) { _dragId = null; return; }
+  const fromIdx = state.modules.findIndex(m => m.id === _dragId);
+  const toIdx   = state.modules.findIndex(m => m.id === id);
+  if (fromIdx === -1 || toIdx === -1) { _dragId = null; return; }
+  const [moved] = state.modules.splice(fromIdx, 1);
+  state.modules.splice(toIdx, 0, moved);
+  _dragId = null;
+  renderSidebar();
+  saveModuleOrder();
+}
+
+function modDragEnd() {
+  _dragId = null;
+  document.querySelectorAll('.module-item').forEach(el => {
+    el.classList.remove('dragging', 'drag-over');
+  });
+}
+
+async function saveModuleOrder() {
+  try {
+    await api.put('/api/modules/reorder', { ids: state.modules.map(m => m.id) });
+  } catch (e) { showToast('排序保存失败', 'error'); }
 }
 
 /* ── Module: select ── */
@@ -328,7 +384,11 @@ async function openDetailModal(id) {
         </div>
         <div class="detail-row">
           <span class="detail-label">所属模块</span>
-          <span class="detail-value"><span class="module-tag">${esc(p.module_name)}</span></span>
+          <span class="detail-value">
+            <select class="module-select-inline" onchange="changeProtoModule(${p.id}, this.value)">
+              ${state.modules.map(m => `<option value="${m.id}" ${m.id === p.module_id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+            </select>
+          </span>
         </div>
         <div class="detail-row">
           <span class="detail-label">更新时间</span>
@@ -410,6 +470,23 @@ async function submitEditPrototype() {
     await loadModules();
     await loadPrototypes();
     openDetailModal(id);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+/* ── Prototype: change module inline ── */
+async function changeProtoModule(id, module_id) {
+  const p = state.currentPrototype;
+  if (!p) return;
+  try {
+    const updated = await api.put(`/api/prototypes/${id}`, {
+      name: p.name,
+      module_id: parseInt(module_id),
+      description: p.description || '',
+    });
+    state.currentPrototype = updated;
+    showToast('模块已更新', 'success');
+    await loadModules();
+    await loadPrototypes();
   } catch (e) { showToast(e.message, 'error'); }
 }
 
