@@ -128,8 +128,15 @@ def allowed_file(filename):
 
 def save_uploaded_file(file, prototype_id, preview_id):
     """Save the file and prepare its preview directory. Returns (data_dict, error)."""
-    filename = secure_filename(file.filename)
-    ext = filename.rsplit(".", 1)[1].lower()
+    original_filename = file.filename
+    ext = original_filename.rsplit(".", 1)[1].lower() if "." in original_filename else ""
+    
+    filename = secure_filename(original_filename)
+    # 修复全中文文件名被 secure_filename 过滤后丢失扩展名的问题
+    if not filename:
+        filename = f"file_{secrets.token_hex(4)}.{ext}"
+    elif "." not in filename:
+        filename = f"{filename}.{ext}"
 
     src_dir = os.path.join(UPLOAD_DIR, "sources", str(prototype_id))
     os.makedirs(src_dir, exist_ok=True)
@@ -196,6 +203,23 @@ def cleanup_prototype(p):
     src_dir = os.path.join(UPLOAD_DIR, "sources", str(p.id))
     if os.path.exists(src_dir):
         shutil.rmtree(src_dir)
+
+
+def _trim_records(prototype_id, keep: int = 10):
+    """每个原型只保留最新的 keep 条上传记录，超出的删除文件并移除记录。"""
+    all_records = (
+        UploadRecord.query
+        .filter_by(prototype_id=prototype_id)
+        .order_by(UploadRecord.upload_time.desc())
+        .all()
+    )
+    for old in all_records[keep:]:
+        if old.file_path and os.path.exists(old.file_path):
+            try:
+                os.remove(old.file_path)
+            except OSError:
+                pass
+        db.session.delete(old)
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +381,8 @@ def upload_prototype_file(pid):
     )
     db.session.add(record)
     p.updated_at = datetime.utcnow()
+    db.session.flush()
+    _trim_records(p.id)
     db.session.commit()
     return jsonify(p.to_dict(detail=True))
 
@@ -368,6 +394,14 @@ def download_prototype(pid):
     if not latest:
         abort(404)
     return send_file(latest.file_path, as_attachment=True, download_name=latest.file_name)
+
+
+@app.route("/api/records/<int:rid>/download")
+def download_record(rid):
+    r = db.get_or_404(UploadRecord, rid)
+    if not r.file_path or not os.path.exists(r.file_path):
+        abort(404)
+    return send_file(r.file_path, as_attachment=True, download_name=r.file_name)
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,9 @@ function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id); }
 
+function openDrawer()  { document.getElementById('drawer-detail').style.display = 'flex'; }
+function closeDrawer() { document.getElementById('drawer-detail').style.display = 'none'; }
+
 function setLoading(btnId, loading) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
@@ -171,7 +174,9 @@ function renderPrototypes() {
         <span class="proto-card-title">${esc(p.name)}</span>
         <span class="proto-card-tag">${esc(p.module_name)}</span>
       </div>
-      ${p.description ? `<div style="font-size:12px;color:#999;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.description)}</div>` : ''}
+      <div class="proto-card-body">
+        ${p.description ? `<div style="font-size:12px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.description)}</div>` : ''}
+      </div>
       <div class="proto-card-footer">
         <span class="proto-card-time">更新：${p.updated_at}</span>
         <a class="proto-card-preview" href="/preview/${p.preview_id}" target="_blank"
@@ -300,9 +305,15 @@ async function openDetailModal(id) {
     const recordsHtml = (p.records || []).length
       ? (p.records || []).map(r => `
           <div class="record-item">
-            <span class="record-time">${r.upload_time}${r.uploader ? '  ' + esc(r.uploader) : ''}</span>
-            <span class="record-count">${r.update_notes ? esc(r.update_notes) : '1 个文件'}</span>
+            <span class="record-time">${r.upload_time}${r.uploader ? ' · ' + esc(r.uploader) : ''}</span>
+            <span class="record-note">${r.update_notes ? esc(r.update_notes) : ''}</span>
             <span class="record-size">${fmtSize(r.file_size)}</span>
+            <a class="record-dl" href="/api/records/${r.id}/download" title="下载此版本" onclick="event.stopPropagation()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
           </div>`).join('')
       : '<div class="record-empty">暂无上传记录</div>';
 
@@ -336,12 +347,6 @@ async function openDetailModal(id) {
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg> 编辑
         </button>
-        <a class="btn-secondary" href="/preview/${p.preview_id}" target="_blank">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/>
-          </svg> 打开预览
-        </a>
         <a class="btn-secondary" href="/api/prototypes/${p.id}/download">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -365,7 +370,7 @@ async function openDetailModal(id) {
       <div class="upload-records-title">上传记录</div>
       <div class="record-list">${recordsHtml}</div>`;
 
-    openModal('modal-detail');
+    openDrawer();
   } catch (e) {
     showToast('加载失败：' + e.message, 'error');
   }
@@ -388,7 +393,7 @@ function openEditProtoModal() {
   sel.innerHTML = state.modules.map(m =>
     `<option value="${m.id}" ${m.id === p.module_id ? 'selected' : ''}>${esc(m.name)}</option>`
   ).join('');
-  closeModal('modal-detail');
+  // 抽屉保持打开，仅叠加显示编辑弹窗
   openModal('modal-edit-proto');
 }
 
@@ -408,40 +413,35 @@ async function submitEditPrototype() {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
-/* ── Prototype: update file ── */
+/* ── Prototype: update file（直接选文件，无需弹窗）── */
 function openUpdateFileModal() {
   const p = state.currentPrototype;
   if (!p) return;
-  document.getElementById('update-proto-id').value = p.id;
-  document.getElementById('update-file-input').value = '';
-  document.getElementById('update-upload-selected').textContent = '';
-  document.getElementById('update-notes').value = '';
-  document.getElementById('update-uploader').value = '';
-  closeModal('modal-detail');
-  openModal('modal-update-file');
+  const input = document.getElementById('quick-update-file');
+  input.value = '';
+  input.click();
 }
 
-async function submitUpdateFile() {
-  const id        = document.getElementById('update-proto-id').value;
-  const fileInput = document.getElementById('update-file-input');
-  if (!fileInput.files[0]) { showToast('请选择文件', 'error'); return; }
+async function onQuickUpdateFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const p = state.currentPrototype;
+  if (!p) { showToast('未找到当前原型', 'error'); return; }
 
   const fd = new FormData();
-  fd.append('file',         fileInput.files[0]);
-  fd.append('update_notes', document.getElementById('update-notes').value.trim());
-  fd.append('uploader',     document.getElementById('update-uploader').value.trim());
+  fd.append('file', file);
 
-  setLoading('btn-update-file', true);
+  showToast('上传中…');
+
   try {
-    await api.post(`/api/prototypes/${id}/upload`, fd);
-    closeModal('modal-update-file');
+    await api.post(`/api/prototypes/${p.id}/upload`, fd);
     showToast('文件更新成功', 'success');
     await loadPrototypes();
-    openDetailModal(id);
+    openDetailModal(p.id);   // 刷新抽屉内容
   } catch (e) {
     showToast(e.message, 'error');
-  } finally {
-    setLoading('btn-update-file', false);
+    openDetailModal(p.id);
   }
 }
 
@@ -450,7 +450,7 @@ async function confirmDeleteProto(id) {
   if (!confirm('确认删除此原型？该操作不可恢复。')) return;
   try {
     await api.del(`/api/prototypes/${id}`);
-    closeModal('modal-detail');
+    closeDrawer();
     state.currentPrototype = null;
     showToast('原型已删除', 'success');
     await loadModules();
@@ -485,8 +485,7 @@ function setupDragDrop(areaId, inputId, selectedId) {
 
 /* ── Init ── */
 async function init() {
-  setupDragDrop('new-upload-area',    'new-proto-file',    'new-upload-selected');
-  setupDragDrop('update-upload-area', 'update-file-input', 'update-upload-selected');
+  setupDragDrop('new-upload-area', 'new-proto-file', 'new-upload-selected');
   try {
     await loadModules();
     await loadPrototypes();

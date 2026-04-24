@@ -142,15 +142,15 @@
 </div>
 
 <!-- ════════════════════════════════════
-     Modal: 原型详情
+     Drawer: 原型详情（右侧抽屉）
 ════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-detail" style="display:none" onclick="overlayClose(event, 'modal-detail')">
-  <div class="modal modal-lg">
-    <div class="modal-header">
+<div class="drawer-overlay" id="drawer-detail" style="display:none" onclick="if(event.target===this)closeDrawer()">
+  <div class="drawer">
+    <div class="drawer-header">
       <h3 id="detail-title"></h3>
-      <button class="btn-close" onclick="closeModal('modal-detail')">×</button>
+      <button class="btn-close" onclick="closeDrawer()">×</button>
     </div>
-    <div class="modal-body" id="detail-body"></div>
+    <div class="drawer-body" id="detail-body"></div>
   </div>
 </div>
 
@@ -185,48 +185,10 @@
   </div>
 </div>
 
-<!-- ════════════════════════════════════
-     Modal: 更新文件
-════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-update-file" style="display:none" onclick="overlayClose(event, 'modal-update-file')">
-  <div class="modal modal-lg">
-    <div class="modal-header">
-      <h3>更新文件</h3>
-      <button class="btn-close" onclick="closeModal('modal-update-file')">×</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="update-proto-id" />
-      <div class="form-group">
-        <label class="form-label required">原型文件</label>
-        <div class="upload-area" id="update-upload-area" onclick="document.getElementById('update-file-input').click()">
-          <div class="upload-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1677ff" stroke-width="1.5">
-              <polyline points="16,16 12,12 8,16"/><line x1="12" y1="12" x2="12" y2="21"/>
-              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
-            </svg>
-          </div>
-          <p>点击上传或拖拽文件到这里</p>
-          <p class="upload-hint">支持 .html 文件或静态资源 zip 包</p>
-          <p class="upload-selected" id="update-upload-selected"></p>
-        </div>
-        <input type="file" id="update-file-input" accept=".html,.zip" style="display:none"
-               onchange="onFileSelect(this,'update-upload-selected')" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">更新说明</label>
-        <input id="update-notes" class="form-input" placeholder="本次更新内容说明（选填）" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">更新人</label>
-        <input id="update-uploader" class="form-input" placeholder="更新人姓名（选填）" />
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-secondary" onclick="closeModal('modal-update-file')">取消</button>
-      <button class="btn-primary" id="btn-update-file" onclick="submitUpdateFile()">上传</button>
-    </div>
-  </div>
-</div>
+
+<!-- 全局隐藏文件输入，供「更新文件」直接触发 -->
+<input type="file" id="quick-update-file" accept=".html,.zip" style="display:none"
+       onchange="onQuickUpdateFileSelect(this)" />
 
 <script src="/static/app.js"></script>
 </body>
