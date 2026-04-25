@@ -139,7 +139,9 @@ def save_uploaded_file(file, prototype_id, preview_id):
     elif "." not in filename:
         filename = f"{filename}.{ext}"
 
-    src_dir = os.path.join(UPLOAD_DIR, "sources", str(prototype_id))
+    # 每次上传使用独立子目录，避免同名文件覆盖历史版本
+    version_id = secrets.token_hex(8)
+    src_dir = os.path.join(UPLOAD_DIR, "sources", str(prototype_id), version_id)
     os.makedirs(src_dir, exist_ok=True)
     file_path = os.path.join(src_dir, filename)
     file.save(file_path)
@@ -215,11 +217,19 @@ def _trim_records(prototype_id, keep: int = 10):
         .all()
     )
     for old in all_records[keep:]:
-        if old.file_path and os.path.exists(old.file_path):
-            try:
-                os.remove(old.file_path)
-            except OSError:
-                pass
+        if old.file_path:
+            # 删除整个版本子目录（父目录即 version_id 目录）
+            version_dir = os.path.dirname(old.file_path)
+            if os.path.isdir(version_dir) and os.path.exists(version_dir):
+                try:
+                    shutil.rmtree(version_dir)
+                except OSError:
+                    pass
+            elif os.path.exists(old.file_path):
+                try:
+                    os.remove(old.file_path)
+                except OSError:
+                    pass
         db.session.delete(old)
 
 
