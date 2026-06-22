@@ -240,8 +240,8 @@ body {
 }
 .proto-card:hover { box-shadow: var(--shadow); border-color: #d0d0d0; }
 
-.proto-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
-.proto-card-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.4; flex: 1; }
+.proto-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; }
+.proto-card-title { font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.4; flex: 1; word-break: break-word;}
 .proto-card-tag {
   margin-left: 8px; flex-shrink: 0;
   font-size: 11px; padding: 1px 6px;
