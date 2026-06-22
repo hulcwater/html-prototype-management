@@ -181,10 +181,10 @@ function renderPrototypes() {
         <span class="proto-card-tag">${esc(p.module_name)}</span>
       </div>
       <div class="proto-card-body">
-        ${p.description ? `<div style="font-size:12px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.description)}</div>` : ''}
+        <div style="font-size:12px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.description ? esc(p.description) : '暂无描述'}</div>
       </div>
       <div class="proto-card-footer">
-        <span class="proto-card-time">更新：${p.updated_at}</span>
+        <span class="proto-card-time">更新：${p.updated_at ? p.updated_at.slice(0, 16).replace('T', ' ') : ''}</span>
         <a class="proto-card-preview" href="/preview/${p.preview_id}" target="_blank"
            onclick="event.stopPropagation()">预览 ↗</a>
       </div>
