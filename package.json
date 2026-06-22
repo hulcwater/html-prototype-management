@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "npx tsx dev-server.ts",
+    "deploy": "wrangler pages deploy public",
+    "deploy:worker": "wrangler deploy",
     "db:init": "wrangler d1 execute html-prototypes --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute html-prototypes --remote --file=./schema.sql",
+    "db:init:local": "npx tsx dev-server.ts --init-only",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -14,8 +16,11 @@
     "hono": "^4.4.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240710.0",
+    "@hono/node-server": "^1.13.0",
+    "@types/node": "^26.0.0",
+    "sql.js": "^1.12.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.5.3",
-    "wrangler": "^3.65.1"
+    "wrangler": "^4.0.0"
   }
 }

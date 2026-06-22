@@ -3,6 +3,8 @@ data.db
 
 # 用户上传的文件
 uploads/
+previews/
+sources/
 
 # Python 缓存
 __pycache__/
@@ -15,9 +17,13 @@ __pycache__/
 # 编辑器
 .vscode/
 .idea/
+.reasonix/
 
 # Node.js
 node_modules/
 
 # Wrangler 本地缓存
 .wrangler/
+
+# wrangler types 自动生成
+worker-configuration.d.ts

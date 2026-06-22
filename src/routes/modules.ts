@@ -52,19 +52,20 @@ modules.delete("/:id", async (c) => {
   // Cascade delete handles prototypes and records via FK; clean up R2 files
   const protos = await db.listPrototypes(c.env.DB, id);
   for (const proto of protos) {
-    await cleanupPrototypeR2(c.env.R2, proto.preview_id);
+    // Clean preview files
+    const previewList = await c.env.R2.list({ prefix: `previews/${proto.preview_id}/` });
+    if (previewList.objects.length > 0) {
+      await c.env.R2.delete(previewList.objects.map((o) => o.key));
+    }
+    // Clean source files (upload records)
+    const records = await db.listRecords(c.env.DB, proto.id);
+    for (const r of records) {
+      if (r.r2_key) await c.env.R2.delete(r.r2_key);
+    }
   }
 
   await db.deleteModule(c.env.DB, id);
   return c.json({ ok: true });
 });
-
-async function cleanupPrototypeR2(r2: R2Bucket, previewId: string) {
-  const list = await r2.list({ prefix: `previews/${previewId}/` });
-  const keys = list.objects.map((o) => o.key);
-  if (keys.length > 0) {
-    await r2.delete(keys);
-  }
-}
 
 export default modules;

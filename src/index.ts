@@ -9,7 +9,10 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors());
 
-// API routes
+// Health check
+app.get("/health", (c) => c.json({ ok: true, time: new Date().toISOString() }));
+
+// API routes — these take priority over static assets
 app.route("/api/modules", modulesRoute);
 app.route("/api/prototypes", prototypesRoute);
 app.route("/api/records", recordDownload);
@@ -17,13 +20,17 @@ app.route("/api/records", recordDownload);
 // Preview routes
 app.route("/preview", previewRoute);
 
-// Serve frontend SPA — Cloudflare Workers Assets handles static files,
-// but for any unmatched route we return the index.html so client-side
-// routing (if any) works correctly.
+// Static files from Pages project's assets directory
+app.use("*", async (c, next) => {
+  const res = await c.env.ASSETS.fetch(c.req.raw);
+  if (res.ok) return res;
+  await next();
+});
+
+// SPA fallback: serve index.html for unmatched client-side routes
 app.get("*", async (c) => {
-  // When deployed with `[assets]` in wrangler.toml, Workers Assets serves
-  // static files automatically before this handler runs.
-  // This fallback handles direct API 404s cleanly.
+  const res = await c.env.ASSETS.fetch(new URL("/index.html", c.req.url));
+  if (res.ok) return res;
   return c.json({ error: "Not Found" }, 404);
 });
 
