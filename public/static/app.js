@@ -37,6 +37,16 @@ function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id);
 function openDrawer()  { document.getElementById('drawer-detail').style.display = 'flex'; }
 function closeDrawer() { document.getElementById('drawer-detail').style.display = 'none'; }
 
+/* ── Sidebar: mobile open/close ── */
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('sidebar-open');
+  document.getElementById('sidebar-overlay').classList.add('sidebar-overlay-active');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('sidebar-open');
+  document.getElementById('sidebar-overlay').classList.remove('sidebar-overlay-active');
+}
+
 function setLoading(btnId, loading) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
@@ -277,6 +287,7 @@ async function saveModuleOrder() {
 /* ── Module: select ── */
 function selectModule(id) {
   state.currentModuleId = id;
+  closeSidebar();
   renderSidebar();
   loadPrototypes();
 }
