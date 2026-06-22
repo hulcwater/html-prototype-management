@@ -43,16 +43,49 @@ function setLoading(btnId, loading) {
   loading ? btn.classList.add('btn-loading') : btn.classList.remove('btn-loading');
 }
 
+/* ── Retry fetch ── */
+const RETRY_MAX = 3;
+const RETRY_BASE_DELAY = 800;
+const FETCH_TIMEOUT = 15000;
+
+async function retryFetch(url, options = {}, attempt = 1) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+  // Strip any old signal from options — each attempt uses its own AbortController
+  const cleanOpts = { ...options };
+  delete cleanOpts.signal;
+  const fetchOpts = { ...cleanOpts, signal: controller.signal };
+
+  try {
+    const res = await fetch(url, fetchOpts);
+    clearTimeout(timeoutId);
+    return res;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const isTimeout = err.name === 'AbortError';
+    const isNetworkError = err instanceof TypeError;
+    const shouldRetry = (isTimeout || isNetworkError) && attempt <= RETRY_MAX;
+
+    if (shouldRetry) {
+      const delay = RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
+      showToast(`网络请求失败，${delay / 1000}秒后第${attempt}次重试…`, 'error');
+      await new Promise(r => setTimeout(r, delay));
+      return retryFetch(url, cleanOpts, attempt + 1);
+    }
+    throw new Error(isTimeout ? '请求超时，请检查网络连接' : '网络连接失败，请检查网络');
+  }
+}
+
 /* ── API ── */
 const api = {
   async get(url) {
-    const res = await fetch(url);
+    const res = await retryFetch(url);
     if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || '请求失败'); }
     return res.json();
   },
   async post(url, body) {
     const isForm = body instanceof FormData;
-    const res = await fetch(url, {
+    const res = await retryFetch(url, {
       method: 'POST',
       headers: isForm ? {} : { 'Content-Type': 'application/json' },
       body: isForm ? body : JSON.stringify(body),
@@ -62,7 +95,7 @@ const api = {
     return j;
   },
   async put(url, body) {
-    const res = await fetch(url, {
+    const res = await retryFetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -72,7 +105,7 @@ const api = {
     return j;
   },
   async del(url) {
-    const res = await fetch(url, { method: 'DELETE' });
+    const res = await retryFetch(url, { method: 'DELETE' });
     if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || '请求失败'); }
     return res.json();
   },
@@ -563,12 +596,111 @@ function setupDragDrop(areaId, inputId, selectedId) {
 /* ── Init ── */
 async function init() {
   setupDragDrop('new-upload-area', 'new-proto-file', 'new-upload-selected');
+  showLoadingOverlay();
   try {
     await loadModules();
     await loadPrototypes();
+    hideLoadingOverlay();
   } catch (e) {
-    showToast('数据加载失败，请刷新页面', 'error');
+    hideLoadingOverlay();
+    showErrorOverlay(e.message);
   }
 }
+
+function showLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function showErrorOverlay(msg) {
+  const overlay = document.getElementById('error-overlay');
+  const msgEl = document.getElementById('error-overlay-msg');
+  if (overlay && msgEl) {
+    msgEl.textContent = msg || '数据加载失败';
+    overlay.style.display = 'flex';
+  }
+}
+
+function hideErrorOverlay() {
+  const overlay = document.getElementById('error-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function retryInit() {
+  hideErrorOverlay();
+  showLoadingOverlay();
+  try {
+    await loadModules();
+    await loadPrototypes();
+    hideLoadingOverlay();
+  } catch (e) {
+    hideLoadingOverlay();
+    showErrorOverlay(e.message);
+  }
+}
+
+/* ── CSS load safeguard ── */
+(function ensureCSS() {
+  const cssHref = '/static/style.css';
+  const link = document.querySelector('link[rel="stylesheet"][href="' + cssHref + '"]');
+  if (!link) return;
+
+  let retryCount = 0;
+  const maxRetry = 3;
+
+  function isCSSLoaded() {
+    // Check if any stylesheet matching our CSS href was successfully loaded.
+    // We avoid accessing cssRules (which throws on cross-origin) by checking
+    // that at least one sheet has our href and reports no error via its
+    // ownerNode's sheet property existence.
+    const sheets = document.styleSheets;
+    for (let i = 0; i < sheets.length; i++) {
+      const sheet = sheets[i];
+      if (sheet.href && sheet.href.includes(cssHref)) {
+        // sheet exists and is attached — if CSS actually failed to load,
+        // the sheet object will have null cssRules and disabled=true
+        try {
+          if (sheet.cssRules && sheet.cssRules.length > 0) return true;
+        } catch (e) {
+          // Cross-origin restriction: can't access cssRules,
+          // but the sheet existing means the HTTP request succeeded.
+          // The file was delivered to the browser — treat as loaded.
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function checkAndReload() {
+    if (isCSSLoaded()) return;
+    if (retryCount >= maxRetry) return;
+    retryCount++;
+    const newLink = document.createElement('link');
+    newLink.rel = 'stylesheet';
+    newLink.href = cssHref + '?retry=' + retryCount + '_' + Date.now();
+    newLink.onload = function () {
+      // Remove the original broken link to avoid duplicates
+      if (link.parentNode && !isCSSLoaded()) {
+        // new link loaded successfully, remove old one
+        link.parentNode.removeChild(link);
+      }
+    };
+    newLink.onerror = function () {
+      setTimeout(checkAndReload, 1500);
+    };
+    document.head.appendChild(newLink);
+  }
+
+  link.onerror = function () { setTimeout(checkAndReload, 1000); };
+  // Delayed check: CSS might appear to load (no onerror) but actually
+  // return empty/corrupt content from a stale CDN cache
+  setTimeout(checkAndReload, 3000);
+})();
 
 init();

@@ -531,3 +531,62 @@ body {
 
 /* ── Loading overlay ── */
 .btn-loading { opacity: .65; pointer-events: none; }
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(240, 242, 245, .85);
+  z-index: 9990;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ── Error overlay ── */
+.error-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(240, 242, 245, .92);
+  z-index: 9990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 48px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.error-msg {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 360px;
+}
