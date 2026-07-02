@@ -29,7 +29,7 @@ export async function getModuleByName(db: D1Database, name: string) {
 
 export async function createModule(db: D1Database, name: string) {
   const result = await db
-    .prepare("INSERT INTO modules (name) VALUES (?) RETURNING *")
+    .prepare("INSERT INTO modules (name, created_at) VALUES (?, datetime('now')) RETURNING *")
     .bind(name)
     .first<Module>();
   return result!;
@@ -99,8 +99,8 @@ export async function createPrototype(
 ) {
   const result = await db
     .prepare(
-      `INSERT INTO prototypes (name, module_id, description, preview_id)
-       VALUES (?, ?, ?, ?) RETURNING *`
+      `INSERT INTO prototypes (name, module_id, description, preview_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now')) RETURNING *`
     )
     .bind(name, moduleId, description, previewId)
     .first<Prototype>();
@@ -169,8 +169,8 @@ export async function createRecord(
   const result = await db
     .prepare(
       `INSERT INTO upload_records
-       (prototype_id, file_name, r2_key, file_size, file_type, uploader, update_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`
+       (prototype_id, file_name, r2_key, file_size, file_type, uploader, update_notes, upload_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now')) RETURNING *`
     )
     .bind(prototypeId, fileName, r2Key, fileSize, fileType, uploader, updateNotes)
     .first<UploadRecord>();

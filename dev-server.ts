@@ -108,6 +108,12 @@ async function main() {
     console.log(`[dev-server] Migrated upload_records: added r2_key column (${records.length} records)`);
   }
 
+  // Data migration: fix NULL timestamps left by older Flask schema (no DEFAULT on datetime columns)
+  await d1.exec("UPDATE prototypes SET created_at = datetime('now') WHERE created_at IS NULL");
+  await d1.exec("UPDATE prototypes SET updated_at = datetime('now') WHERE updated_at IS NULL");
+  await d1.exec("UPDATE upload_records SET upload_time = datetime('now') WHERE upload_time IS NULL");
+  console.log("[dev-server] NULL timestamp migration complete");
+
   const r2 = new R2BucketAdapter(UPLOADS_DIR);
 
   const bindings = {

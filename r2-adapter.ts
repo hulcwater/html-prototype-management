@@ -37,6 +37,8 @@ export class R2BucketAdapter {
     const metadataPath = filePath + ".meta.json";
 
     if (!existsSync(filePath)) return null;
+    // Directories are not files — treat as missing
+    if (statSync(filePath).isDirectory()) return null;
 
     const body = readFileSync(filePath);
     const httpMetadata = existsSync(metadataPath)

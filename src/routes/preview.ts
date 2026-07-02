@@ -4,13 +4,15 @@ import { getPrototypeByPreviewId } from "../db";
 
 const preview = new Hono<{ Bindings: Bindings }>();
 
-// /preview/:previewId  →  serve index.html (or first .html found)
+// /preview/:previewId  →  redirect to trailing-slash version so relative asset paths resolve correctly
 preview.get("/:previewId", async (c) => {
   const previewId = c.req.param("previewId");
   const proto = await getPrototypeByPreviewId(c.env.DB, previewId);
   if (!proto) return c.json({ error: "Not Found" }, 404);
 
-  return servePreviewFile(c.env.R2, previewId, "index.html");
+  // Redirect to /preview/:previewId/ so that relative paths (e.g. "01.png") in the
+  // served HTML resolve to /preview/:previewId/01.png rather than /preview/01.png.
+  return c.redirect(`/preview/${previewId}/`, 301);
 });
 
 // /preview/:previewId/*  →  serve any asset inside the preview folder
@@ -30,11 +32,13 @@ preview.get("/:previewId/*", async (c) => {
 });
 
 async function servePreviewFile(r2: R2Bucket, previewId: string, filePath: string) {
-  const key = `previews/${previewId}/${filePath}`;
+  // Empty path (from the /preview/:id/ trailing-slash URL) → serve index.html directly
+  const resolvedPath = filePath || "index.html";
+  const key = `previews/${previewId}/${resolvedPath}`;
   let obj = await r2.get(key);
 
   // Fallback: if exact path not found and no extension, try index.html
-  if (!obj && !filePath.includes(".")) {
+  if (!obj && !resolvedPath.includes(".")) {
     obj = await r2.get(`previews/${previewId}/index.html`);
   }
 
@@ -44,7 +48,7 @@ async function servePreviewFile(r2: R2Bucket, previewId: string, filePath: strin
   if (obj.httpMetadata?.contentType) {
     headers.set("Content-Type", obj.httpMetadata.contentType);
   } else {
-    headers.set("Content-Type", guessMime(filePath));
+    headers.set("Content-Type", guessMime(resolvedPath));
   }
   // Allow preview iframes from same origin
   headers.set("X-Frame-Options", "SAMEORIGIN");
