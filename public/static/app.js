@@ -58,29 +58,34 @@ const RETRY_MAX = 3;
 const RETRY_BASE_DELAY = 800;
 const FETCH_TIMEOUT = 15000;
 
+// _timeout: ms (0 = no timeout), _noRetry: skip retry on failure
 async function retryFetch(url, options = {}, attempt = 1) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-  // Strip any old signal from options — each attempt uses its own AbortController
+  const timeout = options._timeout !== undefined ? options._timeout : FETCH_TIMEOUT;
+  const noRetry = options._noRetry === true;
   const cleanOpts = { ...options };
   delete cleanOpts.signal;
+  delete cleanOpts._timeout;
+  delete cleanOpts._noRetry;
+
+  const controller = new AbortController();
+  const timeoutId = timeout > 0 ? setTimeout(() => controller.abort(), timeout) : null;
   const fetchOpts = { ...cleanOpts, signal: controller.signal };
 
   try {
     const res = await fetch(url, fetchOpts);
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
     return res;
   } catch (err) {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
     const isTimeout = err.name === 'AbortError';
     const isNetworkError = err instanceof TypeError;
-    const shouldRetry = (isTimeout || isNetworkError) && attempt <= RETRY_MAX;
+    const shouldRetry = !noRetry && (isTimeout || isNetworkError) && attempt <= RETRY_MAX;
 
     if (shouldRetry) {
       const delay = RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
       showToast(`网络请求失败，${delay / 1000}秒后第${attempt}次重试…`, 'error');
       await new Promise(r => setTimeout(r, delay));
-      return retryFetch(url, cleanOpts, attempt + 1);
+      return retryFetch(url, { ...cleanOpts, _timeout: timeout, _noRetry: noRetry }, attempt + 1);
     }
     throw new Error(isTimeout ? '请求超时，请检查网络连接' : '网络连接失败，请检查网络');
   }
@@ -102,6 +107,18 @@ const api = {
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || '请求失败');
+    return j;
+  },
+  // 文件上传专用：无超时限制，不自动重试
+  async upload(url, formData) {
+    const res = await retryFetch(url, {
+      method: 'POST',
+      body: formData,
+      _timeout: 0,
+      _noRetry: true,
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || '上传失败');
     return j;
   },
   async put(url, body) {
@@ -240,7 +257,8 @@ let _dragId = null;
 function modDragStart(e, id) {
   _dragId = id;
   e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => e.currentTarget.classList.add('dragging'), 0);
+  const el = e.currentTarget;
+  setTimeout(() => el.classList.add('dragging'), 0);
 }
 
 function modDragOver(e, id) {
@@ -380,7 +398,7 @@ async function submitNewPrototype() {
 
   setLoading('btn-create-proto', true);
   try {
-    await api.post('/api/prototypes', fd);
+    await api.upload('/api/prototypes', fd);
     closeModal('modal-new-prototype');
     showToast('原型创建成功', 'success');
     await loadModules();
@@ -556,7 +574,7 @@ async function onQuickUpdateFileSelect(input) {
   showToast('上传中…');
 
   try {
-    await api.post(`/api/prototypes/${p.id}/upload`, fd);
+    await api.upload(`/api/prototypes/${p.id}/upload`, fd);
     showToast('文件更新成功', 'success');
     await loadPrototypes();
     openDetailModal(p.id);   // 刷新抽屉内容
