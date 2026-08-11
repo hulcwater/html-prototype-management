@@ -22,6 +22,19 @@ function fmtSize(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(1).replace(/\.0$/, '') + ' ' + units[i];
 }
 
+/* 数据库存的是 UTC 时间（datetime('now')），展示时统一转为北京时间（UTC+8） */
+function toBeijingTime(s) {
+  if (!s) return '';
+  let t = String(s).trim().replace(' ', 'T');
+  // 无时区标记的按 UTC 处理
+  if (!/[zZ]|[+-]\d{2}:\d{2}$/.test(t)) t += 'Z';
+  const d = new Date(t);
+  if (isNaN(d)) return String(s);
+  const pad = (n) => String(n).padStart(2, '0');
+  const bj = new Date(d.getTime() + 8 * 3600 * 1000);
+  return `${bj.getUTCFullYear()}-${pad(bj.getUTCMonth() + 1)}-${pad(bj.getUTCDate())} ${pad(bj.getUTCHours())}:${pad(bj.getUTCMinutes())}:${pad(bj.getUTCSeconds())}`;
+}
+
 function showToast(msg, type = '') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
@@ -280,7 +293,7 @@ function renderPrototypes() {
         <div style="font-size:12px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.description ? esc(p.description) : '暂无描述'}</div>
       </div>
       <div class="proto-card-footer">
-        <span class="proto-card-time">更新：${p.updated_at ? p.updated_at.slice(0, 16).replace('T', ' ') : ''}</span>
+        <span class="proto-card-time">更新：${p.updated_at ? toBeijingTime(p.updated_at).slice(0, 16) : ''}</span>
         <a class="proto-card-preview" href="/preview/${p.preview_id}" target="_blank"
            onclick="event.stopPropagation()">预览 ↗</a>
       </div>
@@ -459,7 +472,7 @@ async function openDetailModal(id) {
     const recordsHtml = (p.records || []).length
       ? (p.records || []).map(r => `
           <div class="record-item">
-            <span class="record-time">${r.upload_time}${r.uploader ? ' · ' + esc(r.uploader) : ''}</span>
+            <span class="record-time">${toBeijingTime(r.upload_time)}${r.uploader ? ' · ' + esc(r.uploader) : ''}</span>
             <span class="record-note">${r.update_notes ? esc(r.update_notes) : ''}</span>
             <span class="record-size">${fmtSize(r.file_size)}</span>
             <a class="record-dl" href="/api/records/${r.id}/download" title="下载此版本" onclick="event.stopPropagation()">
@@ -490,11 +503,11 @@ async function openDetailModal(id) {
         </div>
         <div class="detail-row">
           <span class="detail-label">更新时间</span>
-          <span class="detail-value">${p.updated_at}</span>
+          <span class="detail-value">${toBeijingTime(p.updated_at)}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">创建时间</span>
-          <span class="detail-value">${p.created_at}</span>
+          <span class="detail-value">${toBeijingTime(p.created_at)}</span>
         </div>
       </div>
 
