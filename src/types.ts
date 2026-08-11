@@ -2,6 +2,8 @@ export type Bindings = {
   DB: D1Database;
   R2: R2Bucket;
   ASSETS: Fetcher;
+  // 管理后台访问密码的 SHA-256 十六进制哈希；为空字符串则关闭鉴权
+  AUTH_PASSWORD_HASH: string;
 };
 
 export type Module = {

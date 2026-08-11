@@ -8,6 +8,7 @@ sources/
 
 # 环境变量
 .env
+.env.auth
 
 # 编辑器
 .vscode/

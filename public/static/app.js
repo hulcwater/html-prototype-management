@@ -92,10 +92,24 @@ async function retryFetch(url, options = {}, attempt = 1) {
 }
 
 /* ── API ── */
+// 登录态失效（401）时跳转登录页；防止 init 阶段多个请求重复跳转
+function handleUnauthorized() {
+  if (sessionStorage.getItem('auth-redirecting')) return;
+  sessionStorage.setItem('auth-redirecting', '1');
+  location.href = '/login.html';
+}
+
+function isUnauthorized(res) {
+  return res.status === 401;
+}
+
 const api = {
   async get(url) {
     const res = await retryFetch(url);
-    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || '请求失败'); }
+    if (!res.ok) {
+      if (isUnauthorized(res)) { handleUnauthorized(); throw new Error('未登录或登录已过期'); }
+      const j = await res.json().catch(() => ({})); throw new Error(j.error || '请求失败');
+    }
     return res.json();
   },
   async post(url, body) {
@@ -106,7 +120,10 @@ const api = {
       body: isForm ? body : JSON.stringify(body),
     });
     const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || '请求失败');
+    if (!res.ok) {
+      if (isUnauthorized(res)) { handleUnauthorized(); throw new Error('未登录或登录已过期'); }
+      throw new Error(j.error || '请求失败');
+    }
     return j;
   },
   // 文件上传专用：无超时限制，不自动重试
@@ -118,7 +135,10 @@ const api = {
       _noRetry: true,
     });
     const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || '上传失败');
+    if (!res.ok) {
+      if (isUnauthorized(res)) { handleUnauthorized(); throw new Error('未登录或登录已过期'); }
+      throw new Error(j.error || '上传失败');
+    }
     return j;
   },
   async put(url, body) {
@@ -128,15 +148,30 @@ const api = {
       body: JSON.stringify(body),
     });
     const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || '请求失败');
+    if (!res.ok) {
+      if (isUnauthorized(res)) { handleUnauthorized(); throw new Error('未登录或登录已过期'); }
+      throw new Error(j.error || '请求失败');
+    }
     return j;
   },
   async del(url) {
     const res = await retryFetch(url, { method: 'DELETE' });
-    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || '请求失败'); }
+    if (!res.ok) {
+      if (isUnauthorized(res)) { handleUnauthorized(); throw new Error('未登录或登录已过期'); }
+      const j = await res.json().catch(() => ({})); throw new Error(j.error || '请求失败');
+    }
     return res.json();
   },
 };
+
+/* ── 退出登录 ── */
+async function logout() {
+  try {
+    await api.post('/api/auth/logout');
+  } catch (e) { /* 即使请求失败也回到登录页 */ }
+  sessionStorage.removeItem('auth-redirecting');
+  location.href = '/login.html';
+}
 
 /* ── Data loading ── */
 async function loadModules() {

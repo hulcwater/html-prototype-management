@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Bindings } from "./types";
+import { authGate } from "./auth";
+import authRoute from "./routes/auth";
 import modulesRoute from "./routes/modules";
 import prototypesRoute, { recordDownload } from "./routes/prototypes";
 import previewRoute from "./routes/preview";
@@ -11,6 +13,12 @@ app.use("*", cors());
 
 // Health check
 app.get("/health", (c) => c.json({ ok: true, time: new Date().toISOString() }));
+
+// 访问鉴权：未登录时保护管理后台，/preview/、/login.html、/static/ 等公开路径放行
+app.use("*", authGate);
+
+// 登录 / 登出（公开路径）
+app.route("/api/auth", authRoute);
 
 // API routes — these take priority over static assets
 app.route("/api/modules", modulesRoute);

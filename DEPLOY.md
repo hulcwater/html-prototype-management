@@ -76,6 +76,26 @@ npm run deploy
 https://html-prototype-management.your-subdomain.workers.dev
 ```
 
+### （可选）启用访问密码保护
+
+线上默认**不启用**密码保护。若需保护管理后台（预览链接 `/preview/<id>/` 仍然免登录）：
+
+1. 生成密码的 SHA-256 哈希：
+   ```bash
+   node -e "crypto.subtle.digest('SHA-256', new TextEncoder().encode('你的密码')).then(d => console.log(Buffer.from(d).toString('hex')))"
+   ```
+2. 将哈希注入为 Worker secret（不要在代码中硬编码明文密码）：
+   ```bash
+   wrangler secret put AUTH_PASSWORD_HASH
+   ```
+   按提示粘贴上一步生成的哈希值。
+3. 重新部署即可生效：
+   ```bash
+   npm run deploy
+   ```
+
+> 注意：`public/_routes.json` 已将所有路径（含 `/`、`/index.html`）纳入 Functions 处理以便鉴权。若未设置 `AUTH_PASSWORD_HASH`，行为与之前完全一致（不设密码，全部免登录）。登录态通过 HttpOnly Cookie 保持，「记住我」30 天有效。
+
 ## 项目结构
 
 ```

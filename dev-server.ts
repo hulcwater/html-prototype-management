@@ -2,11 +2,12 @@
 // Uses @hono/node-server (pure Node.js) — no workerd dependency.
 // D1 → sql.js, R2 → local filesystem, ASSETS → public/ directory.
 import { serve } from "@hono/node-server";
-import { existsSync, readFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createD1Adapter } from "./d1-adapter";
 import { R2BucketAdapter } from "./r2-adapter";
+import { sha256, isPublicPath, parseCookie, verifySessionToken, SESSION_COOKIE } from "./src/auth";
 import app from "./src/index";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +76,42 @@ const fakeAssets: Fetcher = {
   fetch: () => Promise.resolve(new Response("x", { status: 404 })),
 };
 
+// ── Access password ───────────────────────────────────────────────────────────
+
+const AUTH_FILE = resolve(__dirname, ".env.auth");
+
+function randomPassword(): string {
+  const arr = new Uint8Array(12);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+// 密码哈希加载顺序：AUTH_PASSWORD_HASH 环境变量 > AUTH_PASSWORD 明文 > .env.auth > 自动生成并保存
+async function resolveAuthHash(): Promise<string> {
+  if (process.env.AUTH_PASSWORD_HASH) return process.env.AUTH_PASSWORD_HASH.trim();
+  if (process.env.AUTH_PASSWORD) return sha256(process.env.AUTH_PASSWORD.trim());
+
+  if (existsSync(AUTH_FILE)) {
+    const m = readFileSync(AUTH_FILE, "utf-8").match(/^AUTH_PASSWORD_HASH=(.+)$/m);
+    if (m && m[1].trim()) return m[1].trim();
+  }
+
+  // 首次运行：生成随机密码，保存哈希到 .env.auth（已 gitignore）
+  const password = randomPassword();
+  const hash = await sha256(password);
+  writeFileSync(AUTH_FILE, `AUTH_PASSWORD_HASH=${hash}\n`, "utf-8");
+  console.log("");
+  console.log("════════════════════════════════════════════════════════════");
+  console.log(`  🔑 首次启动已生成访问密码：${password}`);
+  console.log(`     （已保存至 .env.auth，可用环境变量 AUTH_PASSWORD_HASH / AUTH_PASSWORD 覆盖）`);
+  console.log("════════════════════════════════════════════════════════════");
+  console.log("");
+  return hash;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -116,10 +153,14 @@ async function main() {
 
   const r2 = new R2BucketAdapter(UPLOADS_DIR);
 
+  // 管理后台访问密码哈希（未配置环境变量时自动生成）
+  const authHash = await resolveAuthHash();
+
   const bindings = {
     DB: d1,
     R2: r2,
     ASSETS: fakeAssets,
+    AUTH_PASSWORD_HASH: authHash,
   };
 
   // Periodic DB persistence
@@ -153,13 +194,22 @@ async function main() {
           return app.fetch(request, bindings as any);
         }
 
-        // Static files → serve from public/
+        // Static files → serve from public/, 但管理后台页面需登录（公开路径除外）
+        const cookie = request.headers.get("cookie") ?? "";
+        const token = parseCookie(cookie)[SESSION_COOKIE];
+        const authed = token ? await verifySessionToken(token, authHash) : false;
+        if (!authed && !isPublicPath(url.pathname)) {
+          return Response.redirect(new URL("/login.html", url.origin), 302);
+        }
+
         return serveStatic(url.pathname);
       },
       port: PORT,
     },
     () => {
       console.log(`\n🚀  HTML 原型管理 running at http://localhost:${PORT}`);
+      console.log(`   管理后台已启用密码保护，登录地址：http://localhost:${PORT}/login.html`);
+      console.log(`   预览链接（免登录）：http://localhost:${PORT}/preview/<previewId>/`);
       console.log(`   按 Ctrl+C 停止\n`);
     },
   );

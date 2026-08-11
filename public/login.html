@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 - HTML 原型管理</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #1677ff;
+      --blue-hover: #4096ff;
+      --red: #ff4d4f;
+      --border: #d9d9d9;
+      --bg: #f0f2f5;
+      --text: #333;
+      --text-muted: #999;
+      --radius: 6px;
+      --shadow-lg: 0 8px 32px rgba(0,0,0,.14);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: var(--shadow-lg);
+      width: 360px;
+      max-width: 94vw;
+      padding: 36px 32px 28px;
+    }
+    .login-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .login-logo svg { flex-shrink: 0; }
+    .login-title { font-size: 18px; font-weight: 600; text-align: center; }
+    .login-sub { text-align: center; color: var(--text-muted); font-size: 13px; margin: 8px 0 24px; }
+    .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .form-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      outline: none;
+      color: var(--text);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 2px rgba(22,119,255,.1);
+    }
+    .form-input::placeholder { color: var(--text-muted); }
+    .remember-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 14px 0 20px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .remember-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .remember-row input { accent-color: var(--blue); cursor: pointer; }
+    .btn-login {
+      width: 100%;
+      padding: 10px 16px;
+      background: var(--blue);
+      color: #fff;
+      border: 1px solid var(--blue);
+      border-radius: var(--radius);
+      font-size: 14px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-login:hover { background: var(--blue-hover); border-color: var(--blue-hover); }
+    .btn-login:disabled { opacity: .6; cursor: not-allowed; }
+    .login-error {
+      display: none;
+      margin-bottom: 14px;
+      padding: 8px 12px;
+      background: #fff1f0;
+      border: 1px solid #ffccc7;
+      color: var(--red);
+      border-radius: var(--radius);
+      font-size: 13px;
+    }
+    .login-error.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1677ff" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      <span class="login-title">HTML 原型管理</span>
+    </div>
+    <p class="login-sub">请输入访问密码</p>
+
+    <div class="login-error" id="login-error"></div>
+
+    <label class="form-label" for="password">密码</label>
+    <input type="password" id="password" class="form-input" placeholder="请输入密码"
+           autocomplete="current-password" />
+
+    <div class="remember-row">
+      <label>
+        <input type="checkbox" id="remember" checked />
+        <span>记住我（30 天内免登录）</span>
+      </label>
+    </div>
+
+    <button class="btn-login" id="btn-login" onclick="doLogin()">登 录</button>
+  </div>
+
+  <script>
+    (function () {
+      var input = document.getElementById('password');
+      var btn = document.getElementById('btn-login');
+      var errorEl = document.getElementById('login-error');
+
+      function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.classList.add('show');
+      }
+      function hideError() {
+        errorEl.classList.remove('show');
+      }
+      function setBusy(busy) {
+        btn.disabled = busy;
+        btn.textContent = busy ? '登录中…' : '登 录';
+      }
+
+      async function doLogin() {
+        var password = input.value;
+        if (!password) { showError('请输入密码'); return; }
+        hideError();
+        setBusy(true);
+        try {
+          var res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              password: password,
+              remember: document.getElementById('remember').checked,
+            }),
+          });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) { showError(data.error || '登录失败，请重试'); return; }
+          location.href = '/';
+        } catch (e) {
+          showError('网络错误，请重试');
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      // 回车提交
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') doLogin();
+      });
+      input.focus();
+
+      // 若已登录则直接进入（例如刷新被重定向回来）
+      fetch('/api/modules', { method: 'GET' }).then(function (res) {
+        if (res.ok) location.href = '/';
+      }).catch(function () { /* 网络错误时留在登录页 */ });
+
+      window.doLogin = doLogin;
+    })();
+  </script>
+</body>
+</html>
