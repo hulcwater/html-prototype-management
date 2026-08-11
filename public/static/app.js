@@ -92,11 +92,12 @@ async function retryFetch(url, options = {}, attempt = 1) {
 }
 
 /* ── API ── */
-// 登录态失效（401）时跳转登录页；防止 init 阶段多个请求重复跳转
+// 登录态失效（401）时跳转登录页；用 replace 避免 history 里堆积登录页。
+// sessionStorage 标记防止 init 阶段多个请求重复跳转（登录页加载时会清除）。
 function handleUnauthorized() {
   if (sessionStorage.getItem('auth-redirecting')) return;
   sessionStorage.setItem('auth-redirecting', '1');
-  location.href = '/login.html';
+  location.replace('/login.html');
 }
 
 function isUnauthorized(res) {
@@ -170,7 +171,7 @@ async function logout() {
     await api.post('/api/auth/logout');
   } catch (e) { /* 即使请求失败也回到登录页 */ }
   sessionStorage.removeItem('auth-redirecting');
-  location.href = '/login.html';
+  location.replace('/login.html');
 }
 
 /* ── Data loading ── */

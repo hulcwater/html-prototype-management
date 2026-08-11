@@ -178,6 +178,9 @@
       });
       input.focus();
 
+      // 登录页加载：清理被中断跳转留下的标记，允许重新跳转
+      sessionStorage.removeItem('auth-redirecting');
+
       // 若已登录则直接进入（例如刷新被重定向回来）
       fetch('/api/modules', { method: 'GET' }).then(function (res) {
         if (res.ok) location.href = '/';
