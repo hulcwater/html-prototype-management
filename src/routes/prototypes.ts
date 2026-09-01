@@ -157,10 +157,13 @@ prototypes.post("/:id/upload", async (c) => {
 
   await db.touchPrototype(c.env.DB, id);
 
-  // Trim old records and their R2 source files
+  // Trim old records: delete source files, their preview folders, then the DB rows
   const toDelete = await db.trimRecords(c.env.DB, id, 10);
   for (const old of toDelete) {
     if (old.r2_key) await c.env.R2.delete(old.r2_key);
+    const previewPrefix = `previews/${p.preview_id}/r/${old.id}/`;
+    const oldPreviews = await c.env.R2.list({ prefix: previewPrefix });
+    if (oldPreviews.objects.length > 0) await c.env.R2.delete(oldPreviews.objects.map((o) => o.key));
     await db.deleteRecord(c.env.DB, old.id);
   }
 
@@ -234,15 +237,10 @@ recordDelete.delete("/:rid", async (c) => {
   const proto = await db.getPrototype(c.env.DB, record.prototype_id);
   if (!proto) return c.json({ error: "原型不存在" }, 404);
 
-  // 删除的是最新记录时，先从次新记录的源文件恢复预览目录，成功后再删记录，
-  // 避免"删了记录但预览无法回退"导致预览链接 404
-  if (isLatest) {
-    try {
-      await deployPreviewFromRecord(c.env.R2, next.r2_key, next.file_type, proto.preview_id);
-    } catch {
-      return c.json({ error: "次新版本的源文件缺失，无法回退预览，已取消删除" }, 409);
-    }
-  }
+  // 清理该记录自己的预览目录 previews/<previewId>/r/<rid>/
+  const previewPrefix = `previews/${proto.preview_id}/r/${rid}/`;
+  const oldPreviews = await c.env.R2.list({ prefix: previewPrefix });
+  if (oldPreviews.objects.length > 0) await c.env.R2.delete(oldPreviews.objects.map((o) => o.key));
 
   if (record.r2_key) await c.env.R2.delete(record.r2_key);
   await db.deleteRecord(c.env.DB, rid);
@@ -261,14 +259,13 @@ function isAllowed(filename: string) {
   return ext === "html" || ext === "zip";
 }
 
-// Clear the preview folder and deploy content from a record's source file.
-// Used both on upload (deploy the new file) and on deleting the latest
-// record (roll back to the previous record's source file).
-async function deployPreviewFromRecord(
+// 将某条记录的源文件解压部署到指定预览目录（targetPrefix），如 previews/<previewId>/r/<recordId>。
+// 部署前清空该目录，保证目标目录始终等于该版本的内容。供上传与预览自愈复用。
+export async function deployPreviewFromRecord(
   r2: R2Bucket,
   sourceKey: string,
   fileType: string,
-  previewId: string
+  targetPrefix: string
 ) {
   const obj = await r2.get(sourceKey);
   if (!obj) throw new Error("source file missing");
@@ -277,7 +274,7 @@ async function deployPreviewFromRecord(
   const uint8 = new Uint8Array(buffer);
 
   // Delete previous preview files
-  const existing = await r2.list({ prefix: `previews/${previewId}/` });
+  const existing = await r2.list({ prefix: targetPrefix + "/" });
   if (existing.objects.length > 0) await r2.delete(existing.objects.map((o) => o.key));
 
   if (fileType === "zip") {
@@ -301,14 +298,14 @@ async function deployPreviewFromRecord(
       if (data.length === 0) return; // skip directories
       const relative = path.startsWith(stripPrefix) ? path.slice(stripPrefix.length) : path;
       if (!relative) return;
-      const key = `previews/${previewId}/${relative}`;
+      const key = `${targetPrefix}/${relative}`;
       const ct = guessMime(relative);
       await r2.put(key, data, { httpMetadata: { contentType: ct } });
     });
     await Promise.all(uploads);
   } else {
-    // Single HTML file → previews/<previewId>/index.html
-    await r2.put(`previews/${previewId}/index.html`, buffer, {
+    // Single HTML file → <targetPrefix>/index.html
+    await r2.put(`${targetPrefix}/index.html`, buffer, {
       httpMetadata: { contentType: "text/html; charset=utf-8" },
     });
   }
@@ -335,16 +332,7 @@ async function handleUpload(
     httpMetadata: { contentType: file.type || "application/octet-stream" },
   });
 
-  try {
-    await deployPreviewFromRecord(r2, r2SourceKey, ext, previewId);
-  } catch (err) {
-    await r2.delete(r2SourceKey);
-    if (err instanceof Error && err.message === "source zip corrupted") {
-      return { error: "ZIP 文件损坏或格式不正确" };
-    }
-    return { error: "文件处理失败，请重试" };
-  }
-
+  // 先建记录拿到 id，再部署到该记录自己的预览目录 previews/<previewId>/r/<recordId>
   const record = await db.createRecord(
     dbInst,
     prototypeId,
@@ -355,10 +343,22 @@ async function handleUpload(
     uploader,
     updateNotes
   );
+
+  try {
+    await deployPreviewFromRecord(r2, r2SourceKey, ext, `previews/${previewId}/r/${record.id}`);
+  } catch (err) {
+    await r2.delete(r2SourceKey);
+    await db.deleteRecord(dbInst, record.id);
+    if (err instanceof Error && err.message === "source zip corrupted") {
+      return { error: "ZIP 文件损坏或格式不正确" };
+    }
+    return { error: "文件处理失败，请重试" };
+  }
+
   return record;
 }
 
-function guessMime(filename: string): string {
+export function guessMime(filename: string): string {
   const ext = filename.split(".").pop()?.toLowerCase() ?? "";
   const map: Record<string, string> = {
     html: "text/html; charset=utf-8",

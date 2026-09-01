@@ -509,6 +509,11 @@ async function openDetailModal(id) {
             <span class="record-time">${toBeijingTime(r.upload_time)}${r.uploader ? ' · ' + esc(r.uploader) : ''}</span>
             <span class="record-note">${r.update_notes ? esc(r.update_notes) : ''}</span>
             <span class="record-size">${fmtSize(r.file_size)}</span>
+            <a class="record-view" href="/preview/${p.preview_id}/r/${r.id}/" target="_blank" title="预览此版本" onclick="event.stopPropagation()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </a>
             <a class="record-dl" href="/api/records/${r.id}/download" title="下载此版本" onclick="event.stopPropagation()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
