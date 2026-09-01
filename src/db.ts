@@ -131,16 +131,25 @@ export async function touchPrototype(db: D1Database, id: number) {
     .run();
 }
 
+// 删除最新上传记录后，将原型的 updated_at 回退为剩余最新记录的上传时间
+export async function setPrototypeUpdatedAt(db: D1Database, id: number, updatedAt: string) {
+  await db
+    .prepare("UPDATE prototypes SET updated_at = ? WHERE id = ?")
+    .bind(updatedAt, id)
+    .run();
+}
+
 export async function deletePrototype(db: D1Database, id: number) {
   await db.prepare("DELETE FROM prototypes WHERE id = ?").bind(id).run();
 }
 
 // ── Upload Records ────────────────────────────────────────────────────────────
 
+// upload_time 相同时按 id 降序兜底，保证"最新一条"判定稳定
 export async function listRecords(db: D1Database, prototypeId: number) {
   const result = await db
     .prepare(
-      "SELECT * FROM upload_records WHERE prototype_id = ? ORDER BY upload_time DESC"
+      "SELECT * FROM upload_records WHERE prototype_id = ? ORDER BY upload_time DESC, id DESC"
     )
     .bind(prototypeId)
     .all<UploadRecord>();
@@ -150,7 +159,7 @@ export async function listRecords(db: D1Database, prototypeId: number) {
 export async function getLatestRecord(db: D1Database, prototypeId: number) {
   return db
     .prepare(
-      "SELECT * FROM upload_records WHERE prototype_id = ? ORDER BY upload_time DESC LIMIT 1"
+      "SELECT * FROM upload_records WHERE prototype_id = ? ORDER BY upload_time DESC, id DESC LIMIT 1"
     )
     .bind(prototypeId)
     .first<UploadRecord>();

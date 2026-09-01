@@ -469,8 +469,9 @@ async function openDetailModal(id) {
 
     const previewUrl = `${location.origin}/preview/${p.preview_id}`;
 
-    const recordsHtml = (p.records || []).length
-      ? (p.records || []).map(r => `
+    const records = p.records || [];
+    const recordsHtml = records.length
+      ? records.map((r, i) => `
           <div class="record-item">
             <span class="record-time">${toBeijingTime(r.upload_time)}${r.uploader ? ' · ' + esc(r.uploader) : ''}</span>
             <span class="record-note">${r.update_notes ? esc(r.update_notes) : ''}</span>
@@ -481,6 +482,14 @@ async function openDetailModal(id) {
                 <polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
             </a>
+            ${records.length > 1
+              ? `<button class="record-del" title="删除此记录" onclick="confirmDeleteRecord(${r.id}, ${records.length}, ${JSON.stringify(r.upload_time).replace(/"/g, '&quot;')})">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/>
+                    <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                  </svg>
+                </button>`
+              : ''}
           </div>`).join('')
       : '<div class="record-empty">暂无上传记录</div>';
 
@@ -643,6 +652,22 @@ async function confirmDeleteProto(id) {
     showToast('原型已删除', 'success');
     await loadModules();
     await loadPrototypes();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+/* ── Upload record: delete ── */
+async function confirmDeleteRecord(recordId, totalRecords, uploadTime) {
+  if (totalRecords <= 1) {
+    showToast('至少保留一条上传记录', 'error');
+    return;
+  }
+  if (!confirm(`确认删除上传记录（${toBeijingTime(uploadTime)}）？\n该记录的源文件将被删除，此操作不可恢复。`)) return;
+  try {
+    await api.del(`/api/records/${recordId}`);
+    showToast('记录已删除', 'success');
+    const p = state.currentPrototype;
+    await loadPrototypes();
+    if (p) await openDetailModal(p.id);   // 刷新抽屉，删除最新记录时预览内容会回退到次新版本
   } catch (e) { showToast(e.message, 'error'); }
 }
 

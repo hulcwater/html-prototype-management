@@ -95,8 +95,11 @@ async function resolveAuthHash(): Promise<string> {
   if (process.env.AUTH_PASSWORD) return sha256(process.env.AUTH_PASSWORD.trim());
 
   if (existsSync(AUTH_FILE)) {
-    const m = readFileSync(AUTH_FILE, "utf-8").match(/^AUTH_PASSWORD_HASH=(.+)$/m);
-    if (m && m[1].trim()) return m[1].trim();
+    const content = readFileSync(AUTH_FILE, "utf-8");
+    const mHash = content.match(/^AUTH_PASSWORD_HASH=(.+)$/m);
+    if (mHash && mHash[1].trim()) return mHash[1].trim();
+    const mPlain = content.match(/^AUTH_PASSWORD=(.+)$/m);
+    if (mPlain && mPlain[1].trim()) return sha256(mPlain[1].trim());
   }
 
   // 首次运行：生成随机密码，保存哈希到 .env.auth（已 gitignore）

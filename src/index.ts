@@ -4,7 +4,7 @@ import type { Bindings } from "./types";
 import { authGate } from "./auth";
 import authRoute from "./routes/auth";
 import modulesRoute from "./routes/modules";
-import prototypesRoute, { recordDownload } from "./routes/prototypes";
+import prototypesRoute, { recordDownload, recordDelete } from "./routes/prototypes";
 import previewRoute from "./routes/preview";
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -24,6 +24,7 @@ app.route("/api/auth", authRoute);
 app.route("/api/modules", modulesRoute);
 app.route("/api/prototypes", prototypesRoute);
 app.route("/api/records", recordDownload);
+app.route("/api/records", recordDelete);
 
 // Preview routes
 app.route("/preview", previewRoute);

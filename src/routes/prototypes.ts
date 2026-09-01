@@ -215,11 +215,103 @@ recordDownload.get("/:rid/download", async (c) => {
   });
 });
 
+// ── Delete record ─────────────────────────────────────────────────────────────
+
+export const recordDelete = new Hono<{ Bindings: Bindings }>();
+
+recordDelete.delete("/:rid", async (c) => {
+  const rid = Number(c.req.param("rid"));
+  const record = await db.getRecord(c.env.DB, rid);
+  if (!record) return c.json({ error: "记录不存在" }, 404);
+
+  const records = await db.listRecords(c.env.DB, record.prototype_id);
+  if (records.length <= 1) {
+    return c.json({ error: "至少保留一条上传记录，无法删除" }, 400);
+  }
+
+  const isLatest = records[0].id === rid;
+  const next = records[1];
+  const proto = await db.getPrototype(c.env.DB, record.prototype_id);
+  if (!proto) return c.json({ error: "原型不存在" }, 404);
+
+  // 删除的是最新记录时，先从次新记录的源文件恢复预览目录，成功后再删记录，
+  // 避免"删了记录但预览无法回退"导致预览链接 404
+  if (isLatest) {
+    try {
+      await deployPreviewFromRecord(c.env.R2, next.r2_key, next.file_type, proto.preview_id);
+    } catch {
+      return c.json({ error: "次新版本的源文件缺失，无法回退预览，已取消删除" }, 409);
+    }
+  }
+
+  if (record.r2_key) await c.env.R2.delete(record.r2_key);
+  await db.deleteRecord(c.env.DB, rid);
+
+  if (isLatest) {
+    await db.setPrototypeUpdatedAt(c.env.DB, record.prototype_id, next.upload_time);
+  }
+
+  return c.json({ ok: true });
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function isAllowed(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();
   return ext === "html" || ext === "zip";
+}
+
+// Clear the preview folder and deploy content from a record's source file.
+// Used both on upload (deploy the new file) and on deleting the latest
+// record (roll back to the previous record's source file).
+async function deployPreviewFromRecord(
+  r2: R2Bucket,
+  sourceKey: string,
+  fileType: string,
+  previewId: string
+) {
+  const obj = await r2.get(sourceKey);
+  if (!obj) throw new Error("source file missing");
+  // 用 Response 包装读取，兼容本地适配器（仅有 body 流）与生产 R2
+  const buffer = await new Response(obj.body).arrayBuffer();
+  const uint8 = new Uint8Array(buffer);
+
+  // Delete previous preview files
+  const existing = await r2.list({ prefix: `previews/${previewId}/` });
+  if (existing.objects.length > 0) await r2.delete(existing.objects.map((o) => o.key));
+
+  if (fileType === "zip") {
+    let files: Record<string, Uint8Array>;
+    try {
+      files = unzipSync(uint8);
+    } catch {
+      throw new Error("source zip corrupted");
+    }
+
+    // Detect and strip single top-level folder
+    const keys = Object.keys(files);
+    const topDirs = new Set(keys.map((k) => k.split("/")[0]));
+    const stripPrefix =
+      topDirs.size === 1 && keys.every((k) => k.startsWith([...topDirs][0] + "/"))
+        ? [...topDirs][0] + "/"
+        : "";
+
+    // Upload each file
+    const uploads = Object.entries(files).map(async ([path, data]) => {
+      if (data.length === 0) return; // skip directories
+      const relative = path.startsWith(stripPrefix) ? path.slice(stripPrefix.length) : path;
+      if (!relative) return;
+      const key = `previews/${previewId}/${relative}`;
+      const ct = guessMime(relative);
+      await r2.put(key, data, { httpMetadata: { contentType: ct } });
+    });
+    await Promise.all(uploads);
+  } else {
+    // Single HTML file → previews/<previewId>/index.html
+    await r2.put(`previews/${previewId}/index.html`, buffer, {
+      httpMetadata: { contentType: "text/html; charset=utf-8" },
+    });
+  }
 }
 
 async function handleUpload(
@@ -237,52 +329,20 @@ async function handleUpload(
   const r2SourceKey = `sources/${prototypeId}/${versionId}/${originalName}`;
 
   const buffer = await file.arrayBuffer();
-  const uint8 = new Uint8Array(buffer);
 
   // Store original file in R2
   await r2.put(r2SourceKey, buffer, {
     httpMetadata: { contentType: file.type || "application/octet-stream" },
   });
 
-  if (ext === "zip") {
-    // Decompress and store each entry under previews/<previewId>/
-    let files: Record<string, Uint8Array>;
-    try {
-      files = unzipSync(uint8);
-    } catch {
-      await r2.delete(r2SourceKey);
+  try {
+    await deployPreviewFromRecord(r2, r2SourceKey, ext, previewId);
+  } catch (err) {
+    await r2.delete(r2SourceKey);
+    if (err instanceof Error && err.message === "source zip corrupted") {
       return { error: "ZIP 文件损坏或格式不正确" };
     }
-
-    // Detect and strip single top-level folder
-    const keys = Object.keys(files);
-    const topDirs = new Set(keys.map((k) => k.split("/")[0]));
-    const stripPrefix =
-      topDirs.size === 1 && keys.every((k) => k.startsWith([...topDirs][0] + "/"))
-        ? [...topDirs][0] + "/"
-        : "";
-
-    // Delete previous preview files
-    const existing = await r2.list({ prefix: `previews/${previewId}/` });
-    if (existing.objects.length > 0) await r2.delete(existing.objects.map((o) => o.key));
-
-    // Upload each file
-    const uploads = Object.entries(files).map(async ([path, data]) => {
-      if (data.length === 0) return; // skip directories
-      const relative = path.startsWith(stripPrefix) ? path.slice(stripPrefix.length) : path;
-      if (!relative) return;
-      const key = `previews/${previewId}/${relative}`;
-      const ct = guessMime(relative);
-      await r2.put(key, data, { httpMetadata: { contentType: ct } });
-    });
-    await Promise.all(uploads);
-  } else {
-    // Single HTML file → previews/<previewId>/index.html
-    const existing = await r2.list({ prefix: `previews/${previewId}/` });
-    if (existing.objects.length > 0) await r2.delete(existing.objects.map((o) => o.key));
-    await r2.put(`previews/${previewId}/index.html`, buffer, {
-      httpMetadata: { contentType: "text/html; charset=utf-8" },
-    });
+    return { error: "文件处理失败，请重试" };
   }
 
   const record = await db.createRecord(

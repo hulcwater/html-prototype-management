@@ -497,7 +497,7 @@ body {
 
 .record-item {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr auto auto auto auto;
   align-items: center;
   padding: 8px 16px;
   font-size: 12px;
@@ -520,6 +520,20 @@ body {
   flex-shrink: 0;
 }
 .record-dl:hover { color: var(--blue); border-color: var(--blue); background: var(--blue-light); }
+
+.record-del {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  color: var(--text-muted);
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.record-del:hover { color: var(--red); border-color: var(--red); background: var(--red-light); }
 
 .record-empty { padding: 16px; text-align: center; font-size: 12px; color: var(--text-muted); }
 
