@@ -44,7 +44,7 @@ function showToast(msg, type = '') {
 }
 
 function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function closeModal(id) { const el = document.getElementById(id); el.style.display = 'none'; el.style.zIndex = ''; }
 function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id); }
 
 function openDrawer()  { document.getElementById('drawer-detail').style.display = 'flex'; }
@@ -370,10 +370,23 @@ async function submitAddModule() {
   const name = document.getElementById('add-module-name').value.trim();
   if (!name) { showToast('请输入模块名称', 'error'); return; }
   try {
-    await api.post('/api/modules', { name });
-    closeModal('modal-add-module');
+    const newModule = await api.post('/api/modules', { name });
+    const addModuleEl = document.getElementById('modal-add-module');
+    addModuleEl.style.display = 'none';
+    addModuleEl.style.zIndex = '';
     showToast('模块创建成功', 'success');
     await loadModules();
+    // 如果新建原型弹窗打开着，刷新模块下拉并选中新模块
+    const newProtoModal = document.getElementById('modal-new-prototype');
+    if (newProtoModal && newProtoModal.style.display !== 'none') {
+      const sel = document.getElementById('new-proto-module');
+      sel.innerHTML = '<option value="">请选择模块</option>' +
+        state.modules.map(m =>
+          `<option value="${m.id}" ${m.id === newModule.id ? 'selected' : ''}>${esc(m.name)}</option>`
+        ).join('') +
+        '<option value="__new__">+ 新建模块</option>';
+      sel.classList.remove('placeholder');
+    }
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -413,15 +426,35 @@ async function confirmDeleteModule(id, name) {
 /* ── Prototype: new ── */
 function openNewPrototypeModal() {
   const sel = document.getElementById('new-proto-module');
+  const hasDefault = state.currentModuleId !== null;
   sel.innerHTML = '<option value="">请选择模块</option>' +
     state.modules.map(m =>
       `<option value="${m.id}" ${m.id === state.currentModuleId ? 'selected' : ''}>${esc(m.name)}</option>`
-    ).join('');
+    ).join('') +
+    '<option value="__new__">+ 新建模块</option>';
+  sel.classList.toggle('placeholder', !hasDefault);
   document.getElementById('new-proto-name').value = '';
   document.getElementById('new-proto-desc').value = '';
   document.getElementById('new-proto-file').value = '';
   document.getElementById('new-upload-selected').textContent = '';
   openModal('modal-new-prototype');
+}
+
+function onModuleSelectChange(sel) {
+  sel.classList.toggle('placeholder', !sel.value);
+  if (sel.value === '__new__') {
+    sel.value = '';  // 重置选择
+    sel.classList.add('placeholder');
+    openAddModuleModalFromPrototype();
+  }
+}
+
+function openAddModuleModalFromPrototype() {
+  document.getElementById('add-module-name').value = '';
+  const el = document.getElementById('modal-add-module');
+  el.style.zIndex = '1100';
+  el.style.display = 'flex';
+  setTimeout(() => document.getElementById('add-module-name').focus(), 80);
 }
 
 function onFileSelect(input, selectedId) {
