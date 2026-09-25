@@ -37,3 +37,13 @@ export type UploadRecord = {
   uploader: string;
   update_notes: string;
 };
+
+export type ApiKey = {
+  id: number;
+  name: string;
+  key_prefix: string;
+  key_hash: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};

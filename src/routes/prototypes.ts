@@ -254,7 +254,7 @@ recordDelete.delete("/:rid", async (c) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function isAllowed(filename: string) {
+export function isAllowed(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase();
   return ext === "html" || ext === "zip";
 }
@@ -311,7 +311,7 @@ export async function deployPreviewFromRecord(
   }
 }
 
-async function handleUpload(
+export async function handleUpload(
   r2: R2Bucket,
   dbInst: D1Database,
   file: File,

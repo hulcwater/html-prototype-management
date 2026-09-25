@@ -30,3 +30,15 @@ CREATE TABLE IF NOT EXISTS upload_records (
 CREATE INDEX IF NOT EXISTS idx_prototypes_module_id   ON prototypes(module_id);
 CREATE INDEX IF NOT EXISTS idx_prototypes_preview_id  ON prototypes(preview_id);
 CREATE INDEX IF NOT EXISTS idx_upload_records_proto_id ON upload_records(prototype_id);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL,
+  key_prefix   TEXT    NOT NULL,
+  key_hash     TEXT    NOT NULL UNIQUE,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_used_at TEXT,
+  revoked_at   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(revoked_at);

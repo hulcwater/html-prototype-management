@@ -1,4 +1,4 @@
-import type { Module, Prototype, UploadRecord } from "./types";
+import type { ApiKey, Module, Prototype, UploadRecord } from "./types";
 
 // ── Modules ──────────────────────────────────────────────────────────────────
 
@@ -190,7 +190,7 @@ export async function trimRecords(db: D1Database, prototypeId: number, keep = 10
   const old = await db
     .prepare(
       `SELECT id, r2_key FROM upload_records WHERE prototype_id = ?
-       ORDER BY upload_time DESC LIMIT -1 OFFSET ?`
+       ORDER BY upload_time DESC, id DESC LIMIT -1 OFFSET ?`
     )
     .bind(prototypeId, keep)
     .all<{ id: number; r2_key: string }>();
@@ -206,4 +206,55 @@ export async function getRecord(db: D1Database, id: number) {
     .prepare("SELECT * FROM upload_records WHERE id = ?")
     .bind(id)
     .first<UploadRecord>();
+}
+
+// ── API Keys ─────────────────────────────────────────────────────────────────
+
+export async function getActiveApiKeyByHash(db: D1Database, keyHash: string) {
+  return db
+    .prepare("SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL")
+    .bind(keyHash)
+    .first<ApiKey>();
+}
+
+export async function createApiKey(db: D1Database, name: string, keyPrefix: string, keyHash: string) {
+  const result = await db
+    .prepare(
+      `INSERT INTO api_keys (name, key_prefix, key_hash, created_at)
+       VALUES (?, ?, ?, datetime('now')) RETURNING *`
+    )
+    .bind(name, keyPrefix, keyHash)
+    .first<ApiKey>();
+  return result!;
+}
+
+export async function listApiKeys(db: D1Database) {
+  const result = await db
+    .prepare(
+      `SELECT id, name, key_prefix, created_at, last_used_at, revoked_at
+       FROM api_keys ORDER BY id DESC`
+    )
+    .all<Omit<ApiKey, "key_hash">>();
+  return result.results;
+}
+
+export async function revokeApiKey(db: D1Database, id: number) {
+  const key = await db
+    .prepare("SELECT id FROM api_keys WHERE id = ? AND revoked_at IS NULL")
+    .bind(id)
+    .first<{ id: number }>();
+  if (!key) return false;
+
+  await db
+    .prepare("UPDATE api_keys SET revoked_at = datetime('now') WHERE id = ?")
+    .bind(id)
+    .run();
+  return true;
+}
+
+export async function touchApiKeyLastUsed(db: D1Database, id: number) {
+  await db
+    .prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?")
+    .bind(id)
+    .run();
 }

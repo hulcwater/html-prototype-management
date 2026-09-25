@@ -6,6 +6,8 @@ import authRoute from "./routes/auth";
 import modulesRoute from "./routes/modules";
 import prototypesRoute, { recordDownload, recordDelete } from "./routes/prototypes";
 import previewRoute from "./routes/preview";
+import apiKeysRoute from "./routes/api-keys";
+import apiV1Route from "./routes/api-v1";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -19,6 +21,12 @@ app.use("*", authGate);
 
 // 登录 / 登出（公开路径）
 app.route("/api/auth", authRoute);
+
+// 外部项目调用的版本化接口；由 authGate 强制校验 Bearer API Key。
+app.route("/api/v1", apiV1Route);
+
+// API Key 管理接口仍由管理后台 Cookie 会话保护。
+app.route("/api/api-keys", apiKeysRoute);
 
 // API routes — these take priority over static assets
 app.route("/api/modules", modulesRoute);

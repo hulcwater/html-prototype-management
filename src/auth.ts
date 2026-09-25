@@ -2,6 +2,7 @@
 // 纯 Web Crypto 实现，无 Node 特有 I/O，可同时运行于 Node（本地）与 Cloudflare Workers。
 import type { Context, Next } from "hono";
 import type { Bindings } from "./types";
+import * as db from "./db";
 
 export const SESSION_COOKIE = "proto_session";
 export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 记住我：30 天
@@ -90,6 +91,31 @@ function randomTokenBytes(n = 32): Uint8Array {
   return arr;
 }
 
+export function generateApiKey(): string {
+  return "pk_" + b64urlEncode(randomTokenBytes(32));
+}
+
+export function apiKeyPrefix(apiKey: string): string {
+  return apiKey.slice(0, 11) + "…";
+}
+
+function bearerToken(authorization: string | undefined): string | null {
+  if (!authorization) return null;
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1].trim() || null;
+}
+
+export async function verifyApiKey(c: Context<{ Bindings: Bindings }>): Promise<boolean> {
+  const token = bearerToken(c.req.header("authorization"));
+  if (!token) return false;
+
+  const key = await db.getActiveApiKeyByHash(c.env.DB, await sha256(token));
+  if (!key) return false;
+
+  await db.touchApiKeyLastUsed(c.env.DB, key.id);
+  return true;
+}
+
 // remember=true → 30 天有效；false → 仅浏览器会话内有效（关闭浏览器即失效）
 export async function createSessionToken(hash: string, remember: boolean): Promise<string> {
   const secret = await deriveSecret(hash);
@@ -157,10 +183,33 @@ export function isPublicPath(pathname: string): boolean {
 // 未配置 AUTH_PASSWORD_HASH 时直接放行（保持原有行为）。
 // 未登录：/api/ 请求返回 401 JSON，其余页面请求 302 跳转登录页。
 export async function authGate(c: Context<{ Bindings: Bindings }>, next: Next) {
+  const url = new URL(c.req.url);
+
+  // 外部集成 API 始终要求独立 API Key，不受后台密码开关影响。
+  if (url.pathname === "/api/v1" || url.pathname.startsWith("/api/v1/")) {
+    if (await verifyApiKey(c)) return next();
+    return c.json(
+      {
+        ok: false,
+        error: { code: "UNAUTHORIZED", message: "缺少或无效的 API Key" },
+      },
+      401
+    );
+  }
+
   const hash = c.env.AUTH_PASSWORD_HASH;
+  // API Key 是外部写入权限，只有启用了后台登录后才允许管理。
+  if (url.pathname === "/api/api-keys" || url.pathname.startsWith("/api/api-keys/")) {
+    if (!hash) {
+      return c.json(
+        { ok: false, error: { code: "AUTH_NOT_CONFIGURED", message: "请先配置 AUTH_PASSWORD_HASH 再管理 API Key" } },
+        503
+      );
+    }
+  }
+
   if (!hash) return next();
 
-  const url = new URL(c.req.url);
   if (isPublicPath(url.pathname)) return next();
 
   const cookie = c.req.header("cookie") ?? "";

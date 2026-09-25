@@ -76,6 +76,30 @@ npm run deploy
 https://html-prototype-management.your-subdomain.workers.dev
 ```
 
+### 外部 API 初始化与验证
+
+`schema.sql` 已包含外部 API 所需的 `api_keys` 表。每次部署新增版本前都应执行远程 schema 初始化，以创建缺失的表和索引：
+
+```bash
+npm run db:init:remote
+```
+
+部署后，先登录管理后台，再调用 `POST /api/api-keys` 创建供 CI 或其他项目使用的 API Key。完整 Key 只返回一次，应存入 CI 的 Secret/变量管理中，调用时通过：
+
+```http
+Authorization: Bearer pk_xxxxxxxxxxxxxxxxx
+```
+
+进行一次最小冒烟检查：
+
+```bash
+curl https://<你的域名>/health
+curl https://<你的域名>/api/v1/modules \
+  -H "Authorization: Bearer $PROTOTYPE_API_KEY"
+```
+
+外部 API 的完整创建原型和上传新版本示例见 [README.md](README.md#外部项目-api)。创建成功后应保存响应中的 `preview_id`，并通过 `POST /api/v1/prototypes/<preview_id>/versions` 上传后续版本；`/api/v1` 始终要求 API Key，与是否启用后台密码保护无关。
+
 ### （可选）启用访问密码保护
 
 线上默认**不启用**密码保护。若需保护管理后台（预览链接 `/preview/<id>/` 仍然免登录）：

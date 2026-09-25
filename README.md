@@ -129,6 +129,104 @@ npm run dev
 
 ---
 
+## 外部项目 API
+
+外部项目通过版本化接口 `/api/v1` 创建原型或上传最新版本。该接口使用独立 API Key 鉴权，不会复用管理后台的登录 Cookie。
+
+### 1. 创建 API Key
+
+先使用管理后台登录产生的 Cookie 调用以下接口。完整的 `api_key` **仅在创建时返回一次**，请立即保存到调用项目的密钥管理系统；服务端只保存其 SHA-256 哈希。
+
+```bash
+curl -X POST http://localhost:8787/api/api-keys \
+  -H "Content-Type: application/json" \
+  -H "Cookie: proto_session=<后台登录后的 Cookie>" \
+  -d '{"name":"订单系统 CI"}'
+```
+
+响应示例：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 1,
+    "name": "订单系统 CI",
+    "key_prefix": "pk_xxxxxxxx…",
+    "created_at": "2026-09-25 10:00:00",
+    "api_key": "pk_请妥善保存的完整密钥"
+  }
+}
+```
+
+可通过 `GET /api/api-keys` 查看 Key 的名称、前缀、最后使用时间和撤销状态；通过 `DELETE /api/api-keys/:id` 立即撤销。二者同样需要后台登录 Cookie。
+
+### 2. 调用约定
+
+将 API Key 作为 Bearer Token 放到 `Authorization` 请求头：
+
+```http
+Authorization: Bearer pk_xxxxxxxxxxxxxxxxx
+```
+
+以下示例的 Base URL 为 `http://localhost:8787`。部署后请替换成实际的 Worker 或 Pages 域名。`/api/v1` 即使未开启后台密码保护也始终要求有效 API Key。
+
+所有 JSON 成功响应使用：
+
+```json
+{ "ok": true, "data": {} }
+```
+
+错误响应使用：
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "UNAUTHORIZED | VALIDATION_ERROR | NOT_FOUND | UPLOAD_ERROR",
+    "message": "可读的错误说明"
+  }
+}
+```
+
+上传请求使用 `multipart/form-data`，仅支持 `.html` 和 `.zip` 文件，单个文件最大 **25 MB**。
+
+### 3. 查询模块
+
+创建原型前先查询目标模块，取得 `module_id`：
+
+```bash
+curl http://localhost:8787/api/v1/modules \
+  -H "Authorization: Bearer $PROTOTYPE_API_KEY"
+```
+
+### 4. 新建原型并上传首个版本
+
+```bash
+curl -X POST http://localhost:8787/api/v1/prototypes \
+  -H "Authorization: Bearer $PROTOTYPE_API_KEY" \
+  -F "name=订单管理原型" \
+  -F "module_id=1" \
+  -F "description=由订单系统 CI 自动发布" \
+  -F "file=@./dist/prototype.zip"
+```
+
+成功后请保存 `data.preview_id`：它是外部 API 使用的公开原型标识，后续上传新版本时需要传入。`data.id` 是内部数据库 ID，外部调用无需使用；`data.preview_url` 是始终指向最新版本的稳定预览地址，`data.latest_record.preview_url` 是固定到本次版本的预览地址。
+
+### 5. 上传已有原型的最新版本
+
+```bash
+curl -X POST http://localhost:8787/api/v1/prototypes/<preview_id>/versions \
+  -H "Authorization: Bearer $PROTOTYPE_API_KEY" \
+  -F "uploader=orders-ci" \
+  -F "update_notes=优化订单列表筛选交互" \
+  -F "file=@./dist/prototype-v2.zip"
+```
+
+将 `<preview_id>` 替换为创建原型响应中的 `data.preview_id`，不是内部数字 `data.id`。接口返回 HTTP `201`，其中 `data.prototype.preview_url` 指向新上传的最新版本，`data.version.preview_url` 固定指向本次上传版本。每次上传都会保留为独立记录；管理后台现有的版本保留策略仍会清理超出上限的旧版本。
+
+---
+
 ## 目录结构
 
 ```
